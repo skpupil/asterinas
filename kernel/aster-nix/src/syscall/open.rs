@@ -1,18 +1,30 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use super::{SyscallReturn, SYS_OPENAT};
+use super::{SyscallReturn, SYS_CREAT, SYS_OPEN, SYS_OPENAT};
 use crate::{
     fs::{
         file_handle::FileLike,
         file_table::{FdFlags, FileDesc},
         fs_resolver::{FsPath, AT_FDCWD},
-        utils::CreationFlags,
+        utils::{AccessMode, CreationFlags},
     },
     log_syscall_entry,
     prelude::*,
     syscall::constants::MAX_FILENAME_LEN,
     util::read_cstring_from_user,
 };
+
+pub fn sys_open(path_addr: Vaddr, flags: u32, mode: u16) -> Result<SyscallReturn> {
+    log_syscall_entry!(SYS_OPEN);
+    self::open_at(AT_FDCWD, path_addr, flags, mode)
+}
+
+pub fn sys_creat(path_addr: Vaddr, mode: u16) -> Result<SyscallReturn> {
+    log_syscall_entry!(SYS_CREAT);
+    let flags =
+        AccessMode::O_WRONLY as u32 | CreationFlags::O_CREAT.bits() | CreationFlags::O_TRUNC.bits();
+    self::open_at(AT_FDCWD, path_addr, flags, mode)
+}
 
 pub fn sys_openat(
     dirfd: FileDesc,
@@ -21,6 +33,10 @@ pub fn sys_openat(
     mode: u16,
 ) -> Result<SyscallReturn> {
     log_syscall_entry!(SYS_OPENAT);
+    open_at(dirfd, path_addr, flags, mode)
+}
+
+fn open_at(dirfd: FileDesc, path_addr: Vaddr, flags: u32, mode: u16) -> Result<SyscallReturn> {
     let path = read_cstring_from_user(path_addr, MAX_FILENAME_LEN)?;
     debug!(
         "dirfd = {}, path = {:?}, flags = {}, mode = {}",
@@ -46,10 +62,6 @@ pub fn sys_openat(
         file_table.insert(file_handle, fd_flags)
     };
     Ok(SyscallReturn::Return(fd as _))
-}
-
-pub fn sys_open(path_addr: Vaddr, flags: u32, mode: u16) -> Result<SyscallReturn> {
-    self::sys_openat(AT_FDCWD, path_addr, flags, mode)
 }
 
 /// File for output busybox ash log.
